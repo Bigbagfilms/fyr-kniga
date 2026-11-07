@@ -51,10 +51,18 @@ body{margin:0;background:radial-gradient(ellipse at 50% 40%,var(--desk-2),var(--
 #vote .row button[type=submit]{background:var(--accent);border-color:var(--accent);color:#fff}
 #vote .row button:disabled{opacity:.5}
 #vote .msg{min-height:1.2em;font-size:13px;text-align:center;color:var(--muted)}
-.support-page .pc{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.support-page .pc{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:.4em}
+.support-page .sup{border-top:1px dotted #d8d2c4;padding-top:.8em;margin-top:.6em;display:flex;flex-direction:column;align-items:center}
+.votebox h3{font-family:var(--display);font-size:2.6em;line-height:1;margin:0;color:var(--ink)}
+.vnames b.kid{color:#e8543a;font-weight:400;display:inline-block;transform:rotate(-8deg)}
+#vote .stars{flex-wrap:nowrap}
+#vote .kidslot{width:30px;height:38px;padding:0;opacity:0;transition:opacity .15s;display:grid;place-items:center}
+#vote .kidslot.show{opacity:1}
+#vote .kidslot svg{width:30px;height:32px;display:block}
+@media (max-width:420px){#vote .stars button{font-size:30px}#vote .kidslot{width:24px}#vote .kidslot svg{width:24px;height:26px}}
 .support-page img{width:34%;mix-blend-mode:multiply}
-.support-page h3{font-family:var(--display);font-size:2.3em;line-height:1;margin:.3em 0 .5em}
-.support-page .pc p{text-indent:0;text-align:center;hyphens:manual;font-size:.92em;max-width:92%}
+.support-page .sup h3{font-family:var(--display);font-size:2.1em;line-height:1;margin:0 0 .4em}
+.support-page .sup p{text-indent:0;text-align:center;hyphens:manual;font-size:.92em;max-width:92%}
 .support-page .sign{font-family:"Marck Script",cursive;font-size:1.5em;color:#3d3a52;margin-top:.6em}
 @media (max-width:560px){.bar a.support{font-size:0}.bar a.support::before{content:"♥ Помочь";font-size:14px}}
 .the-end .thanks{font-family:var(--ui);font-size:.7em;color:var(--muted);margin-top:1.2em;text-align:center;max-width:80%}
@@ -263,13 +271,14 @@ function build(G) {
     if (pendingSpot) { pc = mk("text"); place(`<figure class="spot ${pendingSpot.side}" style="float:none;margin:20% auto 0;width:50%"><img src="${S(pendingSpot.src)}" alt=""></figure>`); }
   }
   DATA.chapters.forEach((c, i) => c._last = (i + 1 < DATA.chapters.length ? DATA.chapters[i + 1]._art : pages.length) - 1);
+  if (pages.length % 2 === 0) filler();            // «Конец» всегда на левой странице разворота
   const end = mk("the-end");
-  end.innerHTML = `<img src="${S("v-szadi.jpg")}" alt=""><p>Конец</p><span class="sign">${DATA.author}</span>` +
-    (DATA.votes ? `<div class="votebox" hidden><div class="vsum">Будьте первым, кто оценит сказку</div><button class="votebtn" type="button">★ Оценить сказку</button><ul class="vnames"></ul></div>` : "") +
-    "";
-  if (DATA.support) {
+  end.innerHTML = `<img src="${S("v-szadi.jpg")}" alt=""><p>Конец</p>`;
+  if (DATA.votes || DATA.support) {
     const sp = mk("support-page");
-    sp.innerHTML = `<img src="${S("v-speredi.jpg")}" alt=""><h3>Помогите Фыру стать бумажным</h3><p>${DATA.supportText}</p><span class="sign">${DATA.author}</span>`;
+    sp.innerHTML =
+      (DATA.votes ? `<div class="votebox" hidden><h3>Как вам сказка?</h3><div class="vsum">Будьте первым, кто оценит сказку</div><button class="votebtn" type="button">★ Оценить сказку</button><ul class="vnames"></ul></div>` : "") +
+      (DATA.support ? `<div class="sup"><h3>Помогите Фыру стать бумажным</h3><p>${DATA.supportText}</p><span class="sign">${DATA.author}</span></div>` : "");
   }
   if (pages.length % 2 === 1) filler();
   mk("hard endpaper", true).remove();
@@ -304,19 +313,47 @@ async function loadSummary() {
       box.querySelector(".vsum").innerHTML = d.count
         ? `<b>★ ${d.avg}</b> · ${d.count} ${plural(d.count, "оценка", "оценки", "оценок")}`
         : "Будьте первым, кто оценит сказку";
+      if (d.super) box.querySelector(".vsum").innerHTML += `<br>${d.super} ${plural(d.super, "читателю", "читателям", "читателям")} понравилось больше, чем на пять`;
       box.querySelector(".votebtn").textContent = voted ? "Спасибо за оценку!" : "★ Оценить сказку";
-      box.querySelector(".vnames").innerHTML = (d.recent || []).map(v => `<li>${esc(v.name)} <i>${"★".repeat(v.rating)}</i></li>`).join("");
+      box.querySelector(".vnames").innerHTML = (d.recent || []).map(v => `<li>${esc(v.name)} <i>${"★".repeat(v.rating)}</i>${v.bonus ? `<b class="kid">${"✶".repeat(v.bonus)}</b>` : ""}</li>`).join("");
     });
   } catch (e) {}
 }
 function plural(n, a, b, c) { const m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : (m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c); }
-let vrating = 0;
+let vrating = 0, vbonus = 0;
 function setupVotes() {
   if (!DATA.votes) return;
   const modal = document.getElementById("vote"), stars = modal.querySelector(".stars"), send = document.getElementById("vsend"), msg = document.getElementById("vmsg");
-  stars.innerHTML = [1, 2, 3, 4, 5].map(n => `<button type="button" data-n="${n}" role="radio" aria-label="${n} из 5">★</button>`).join("");
-  const paint = () => stars.querySelectorAll("button").forEach(b => { b.classList.toggle("on", +b.dataset.n <= vrating); b.setAttribute("aria-checked", +b.dataset.n === vrating); });
-  stars.onclick = e => { const b = e.target.closest("button"); if (!b) return; vrating = +b.dataset.n; paint(); send.disabled = false; };
+  // пять обычных звёзд и пять спрятанных справа: при наведении они «пририсовываются» от руки, как детским карандашом
+  const KID = ["#e8543a", "#f2a33a", "#e2489a", "#4a8fe0", "#3fae6a"];
+  const kidStar = i => {
+    const pts = [], R = 16, r = 7, rot = (Math.random() - .5) * .7;
+    for (let k = 0; k < 10; k++) {
+      const a = rot - Math.PI / 2 + k * Math.PI / 5, rr = (k % 2 ? r : R) * (.8 + Math.random() * .4);
+      pts.push([20 + Math.cos(a) * rr + (Math.random() - .5) * 3, 21 + Math.sin(a) * rr + (Math.random() - .5) * 3]);
+    }
+    const d = "M" + pts.map(p => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L") + ` L${(pts[0][0] + 3.5).toFixed(1)} ${(pts[0][1] + 2).toFixed(1)}`;
+    const c = KID[i % 5];
+    return `<svg viewBox="0 0 40 42" aria-hidden="true"><path d="${d}" fill="${c}" fill-opacity=".3" stroke="${c}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+  };
+  stars.innerHTML = [1, 2, 3, 4, 5].map(n => `<button type="button" data-n="${n}" role="radio" aria-label="${n} из 5">★</button>`).join("") +
+    [1, 2, 3, 4, 5].map(k => `<button type="button" class="kidslot" data-k="${k}" aria-label="Больше чем на пять: +${k}">${kidStar(k - 1)}</button>`).join("");
+  const kids = [...stars.querySelectorAll(".kidslot")];
+  const showKids = k => kids.forEach(b => b.classList.toggle("show", +b.dataset.k <= k));
+  const paint = () => {
+    stars.querySelectorAll("button[data-n]").forEach(b => { b.classList.toggle("on", +b.dataset.n <= vrating); b.setAttribute("aria-checked", +b.dataset.n === vrating); });
+    showKids(vbonus);
+  };
+  kids.forEach(b => {
+    b.addEventListener("mouseenter", () => showKids(Math.max(vbonus, +b.dataset.k)));
+    b.addEventListener("mouseleave", () => showKids(vbonus));
+  });
+  stars.onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.k) { vrating = 5; vbonus = +b.dataset.k; msg.textContent = vbonus > 2 ? "Ого! Сильно больше, чем на пять!" : "Больше, чем на пять!"; }
+    else { vrating = +b.dataset.n; vbonus = 0; msg.textContent = ""; }
+    paint(); send.disabled = false;
+  };
   const open = () => { msg.textContent = ""; modal.hidden = false; };
   document.querySelectorAll(".votebtn").forEach(b => {
     b.addEventListener("click", e => { e.stopPropagation(); open(); });
@@ -333,7 +370,7 @@ function setupVotes() {
     const name = document.getElementById("vname").value.trim().slice(0, 40);
     const comment = document.getElementById("vcomment").value.trim().slice(0, 300);
     try {
-      const r = await vapi("fyr_votes", { rating: vrating, name: name || null, comment: comment || null });
+      const r = await vapi("fyr_votes", { rating: vrating, bonus: vbonus, name: name || null, comment: comment || null });
       if (!r.ok) throw new Error(r.status);
       try { localStorage.setItem(VKEY, String(vrating)); } catch (e2) {}
       msg.textContent = "Спасибо! Ваша оценка сохранена.";
